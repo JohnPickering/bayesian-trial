@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bayesian Clinical Trial Tree</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f9;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            margin: 0;
+        }
+
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            max-width: 900px;
+            width: 100%;
+            position: relative;
+        }
+
+        h1 { color: #2c3e50; text-align: center; margin-bottom: 10px; }
+        p.subtitle { text-align: center; color: #7f8c8d; margin-bottom: 30px; }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 30px;
+        }
+
+        .controls {
+            background: #ebf2f9;
+            padding: 20px;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label { font-weight: bold; color: #34495e; font-size: 14px; }
+        input[type=range] { width: 100%; cursor: pointer; }
+        .val-display { font-family: monospace; float: right; color: #2980b9; }
+
+        .result-box {
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff;
+            border-left: 5px solid #27ae60;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .result-label {
+            font-size: 14px; 
+            color: #7f8c8d; 
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        #final-prob {
+            font-size: 24px;
+            font-weight: bold;
+            color: #27ae60;
+            display: block;
+        }
+
+        .viz-area {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        svg {
+            width: 100%;
+            height: auto;
+            max-width: 600px;
+        }
+
+        .node-box {
+            stroke-width: 2;
+            transition: all 0.3s ease;
+        }
+
+        .label-text {
+            font-size: 12px;
+            font-weight: bold;
+            text-anchor: middle;
+            pointer-events: none;
+        }
+
+        .line {
+            stroke: #bdc3c7;
+            stroke-width: 3;
+            fill: none;
+        }
+
+        /* Colors */
+        .color-root { fill: #ecf0f1; stroke: #7f8c8d; }
+        .color-h1 { fill: #d5f5e3; stroke: #2ecc71; }
+        .color-h0 { fill: #fdedec; stroke: #e74c3c; }
+        .color-tp { fill: #abebc6; stroke: #27ae60; }
+        .color-fn { fill: #fdfefe; stroke: #95a5a6; }
+        .color-fp { fill: #fadbd8; stroke: #c0392b; }
+        .color-tn { fill: #fdfefe; stroke: #95a5a6; }
+
+        /* New elements requested */
+        .info-box {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #fcfcfc;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            color: #444;
+            line-height: 1.6;
+            font-size: 15px;
+            text-align: justify;
+        }
+
+        .copyright {
+            margin-top: 20px;
+            text-align: right;
+            font-size: 11px;
+            color: #bdc3c7;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>The Bayesian Probability Tree</h1>
+    <p class="subtitle">Visualize why a "positive" result isn't always a true discovery.</p>
+
+    <div class="main-layout">
+        <div class="controls">
+            <div class="control-group">
+                <label>Prior Prob P(H1): <span id="v-prior" class="val-display">0.10</span></label>
+                <input type="range" id="prior" min="0" max="1" step="0.01" value="0.10">
+            </div>
+
+            <div class="control-group">
+                <label>Power P(R+ | H1): <span id="v-power" class="val-display">0.80</span></label>
+                <input type="range" id="power" min="0" max="1" step="0.01" value="0.80">
+            </div>
+
+            <div class="control-group">
+                <label>Alpha P(R+ | H0): <span id="v-alpha" class="val-display">0.05</span></label>
+                <input type="range" id="alpha" min="0" max="1" step="0.01" value="0.05">
+            </div>
+
+            <div class="result-box">
+                <span class="result-label">P(H1 | Positive Result) <br> <strong>TP / (TP + FP)</strong></span>
+                <span id="final-prob">0%</span>
+            </div>
+        </div>
+
+        <div class="viz-area">
+            <svg viewBox="0 0 500 400" xmlns="http://www.w3.org/2000/svg">
+                <!-- Lines -->
+                <line id="l1" class="line" x1="250" y1="60" x2="125" y2="150" />
+                <line id="l2" class="line" x1="250" y1="60" x2="375" y2="150" />
+                <line id="l3" class="line" x1="125" y1="150" x2="60" y2="280" />
+                <line id="l4" class="line" x1="125" y1="150" x2="190" y2="280" />
+                <line id="l5" class="line" x1="375" y1="150" x2="310" y2="280" />
+                <line id="l6" class="line" x1="375" y1="150" x2="440" y2="280" />
+
+                <!-- Root Node -->
+                <rect x="200" y="30" width="100" height="50" rx="5" class="node-box color-root" />
+                <text x="250" y="45" class="label-text">Total Trials</text>
+                <text id="t-root" x="250" y="65" class="label-text" style="font-size: 16px;">1000</text>
+
+                <!-- Layer 2 -->
+                <rect x="75" y="130" width="100" height="50" rx="5" class="node-box color-h1" />
+                <text x="125" y="145" class="label-text">H1 True</text>
+                <text id="t-h1" x="125" y="165" class="label-text" style="font-size: 16px;">100</text>
+
+                <rect x="325" y="130" width="100" height="50" rx="5" class="node-box color-h0" />
+                <text x="375" y="145" class="label-text">H0 True</text>
+                <text id="t-h0" x="375" y="165" class="label-text" style="font-size: 16px;">900</text>
+
+                <!-- Layer 3 -->
+                <rect x="10" y="260" width="100" height="50" rx="5" class="node-box color-tp" />
+                <text x="60" y="275" class="label-text">True Positives</text>
+                <text id="t-tp" x="60" y="295" class="label-text" style="font-size: 16px;">80</text>
+
+                <rect x="140" y="260" width="100" height="50" rx="5" class="node-box color-fn" />
+                <text x="190" y="275" class="label-text">False Negatives</text>
+                <text id="t-fn" x="190" y="295" class="label-text" style="font-size: 16px;">20</text>
+
+                <rect x="260" y="260" width="100" height="50" rx="5" class="node-box color-fp" />
+                <text x="310" y="275" class="label-text">False Positives</text>
+                <text id="t-fp" x="310" y="295" class="label-text" style="font-size: 16px;">45</text>
+
+                <rect x="390" y="260" width="100" height="50" rx="5" class="node-box color-tn" />
+                <text x="440" y="275" class="label-text">True Negatives</text>
+                <text id="t-tn" x="440" y="295" class="label-text" style="font-size: 16px;">855</text>
+            </svg>
+        </div>
+    </div>
+
+    <div class="info-box">
+        Before conducting a power calculation a researcher must choose alpha and power. This will depend on their tolerance for a false positive for the trial and also on their expectations for the trial. This is expressed as a Prior probability. If the evidence is very good that the intervention will work, then this may be &gt;50%. However, as many interventions tested do not work it may be that it is much less than 50%. This will depend on prior trials in the field and the strength of the evidence for the intervention (e.g. from biological plausibility, pre-clinical studies, pilot studies, observational studies).
+    </div>
+
+    <div class="copyright">
+        © John W Pickering, August 2026
+    </div>
+</div>
+
+<script>
+    const inputs = ['prior', 'power', 'alpha'];
+    const displays = {
+        prior: document.getElementById('v-prior'),
+        power: document.getElementById('v-power'),
+        alpha: document.getElementById('v-alpha')
+    };
+
+    function update() {
+        const prior = parseFloat(document.getElementById('prior').value);
+        const power = parseFloat(document.getElementById('power').value);
+        const alpha = parseFloat(document.getElementById('alpha').value);
+        const N = 1000;
+
+        displays.prior.innerText = prior.toFixed(2);
+        displays.power.innerText = power.toFixed(2);
+        displays.alpha.innerText = alpha.toFixed(2);
+
+        const h1_count = N * prior;
+        const h0_count = N * (1 - prior);
+        
+        const tp = h1_count * power;
+        const fn = h1_count * (1 - power);
+        
+        const fp = h0_count * alpha;
+        const tn = h0_count * (1 - alpha);
+
+        const prob_h1_given_pos = tp / (tp + fp);
+
+        document.getElementById('t-root').textContent = N;
+        document.getElementById('t-h1').textContent = Math.round(h1_count);
+        document.getElementById('t-h0').textContent = Math.round(h0_count);
+        document.getElementById('t-tp').textContent = Math.round(tp);
+        document.getElementById('t-fn').textContent = Math.round(fn);
+        document.getElementById('t-fp').textContent = Math.round(fp);
+        document.getElementById('t-tn').textContent = Math.round(tn);
+
+        const resultEl = document.getElementById('final-prob');
+        if (isNaN(prob_h1_given_pos) || !isFinite(prob_h1_given_pos)) {
+            resultEl.innerText = "0%";
+        } else {
+            resultEl.innerText = (prob_h1_given_pos * 100).toFixed(2) + "%";
+        }
+    }
+
+    inputs.forEach(id => {
+        document.getElementById(id).addEventListener('input', update);
+    });
+
+    update();
+</script>
+
+</body>
+</html>
